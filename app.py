@@ -14,7 +14,7 @@ import yt_dlp
 
 load_dotenv()
 
-YOUTUBE_API_KEY = "AIzaSyBDbdYTLj-9uaTF959q0Kk7yVDtRCAj8x8"
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
