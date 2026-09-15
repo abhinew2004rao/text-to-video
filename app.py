@@ -25,14 +25,12 @@ load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
-if not YOUTUBE_API_KEY:
-    raise ValueError(
-        "YOUTUBE_API_KEY is not set. Please add it to your .env file:\n"
-        "YOUTUBE_API_KEY=your_key_here"
-    )
-
-DOWNLOAD_DIR = Path("downloads")
-DOWNLOAD_DIR.mkdir(exist_ok=True)
+try:
+    DOWNLOAD_DIR = Path("downloads")
+    DOWNLOAD_DIR.mkdir(exist_ok=True)
+except (PermissionError, OSError):
+    DOWNLOAD_DIR = Path("/tmp/downloads")
+    DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 
 # ============================================================

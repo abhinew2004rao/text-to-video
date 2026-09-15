@@ -1,0 +1,13 @@
+# Vercel ignore
+downloads/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.mp4
+*.webm
+*.mkv
+.git
+.vscode/
+run_frontend.bat

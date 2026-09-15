@@ -14,26 +14,33 @@ if sys.platform == "win32":
         pass
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Import existing backend modules without modifying app.py
-import app
+import app as core_app
 
 BASE_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = BASE_DIR / "frontend"
-DOWNLOADS_DIR = app.DOWNLOAD_DIR.resolve()
-DOWNLOADS_DIR.mkdir(exist_ok=True)
+try:
+    DOWNLOADS_DIR = core_app.DOWNLOAD_DIR.resolve()
+    DOWNLOADS_DIR.mkdir(exist_ok=True)
+except (PermissionError, OSError):
+    DOWNLOADS_DIR = Path("/tmp/downloads")
+    DOWNLOADS_DIR.mkdir(exist_ok=True)
 
 server_app = FastAPI(
-    title="Text to Video Studio API",
+    title="GenVideo Studio API",
     version="1.0.0",
     description="Studio backend wrapping text-to-video pipeline"
 )
 
-# Mount frontend directory for static assets
+# Router for all API routes (supports both /api/* and root /* on serverless)
+router = APIRouter()
+
+# Mount frontend directory for static assets if local
 if FRONTEND_DIR.exists():
     server_app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
@@ -55,7 +62,7 @@ def get_video_metadata(file_path: Path):
         stat = file_path.stat()
         duration = None
         try:
-            duration = round(app.get_video_duration(file_path), 2)
+            duration = round(core_app.get_video_duration(file_path), 2)
         except Exception:
             pass
 
@@ -98,11 +105,13 @@ async def serve_index():
     """Serve the studio index.html."""
     index_path = FRONTEND_DIR / "index.html"
     if not index_path.exists():
+        index_path = BASE_DIR / "public" / "index.html"
+    if not index_path.exists():
         return HTMLResponse("<h1>Frontend assets not found</h1>", status_code=404)
     return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
 
 
-@server_app.get("/api/status")
+@router.get("/status")
 async def get_status():
     """Health and status check."""
     ffmpeg_ok = False
@@ -118,7 +127,7 @@ async def get_status():
 
     return {
         "status": "online",
-        "api_key_configured": bool(app.YOUTUBE_API_KEY),
+        "api_key_configured": bool(core_app.YOUTUBE_API_KEY),
         "ffmpeg_ready": ffmpeg_ok,
         "downloads_dir": str(DOWNLOADS_DIR),
         "total_files": len(video_files),
@@ -126,7 +135,7 @@ async def get_status():
     }
 
 
-@server_app.get("/api/history")
+@router.get("/history")
 async def get_history():
     """List previously generated videos and clips."""
     files = []
@@ -140,7 +149,7 @@ async def get_history():
     return {"items": items, "count": len(items)}
 
 
-@server_app.post("/api/generate")
+@router.post("/generate")
 async def generate_video(payload: GenerateRequest):
     """Run the generation pipeline."""
     if not payload.prompt.strip():
@@ -150,7 +159,7 @@ async def generate_video(payload: GenerateRequest):
 
     # 1. Search YouTube
     try:
-        url, video_id = app.search_youtube(query)
+        url, video_id = core_app.search_youtube(query)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"YouTube search error: {str(e)}")
 
@@ -159,13 +168,13 @@ async def generate_video(payload: GenerateRequest):
 
     # 2. Download 360p
     try:
-        video_path = app.download_360p(url, video_id)
+        video_path = core_app.download_360p(url, video_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
 
     # 3. Check duration
     try:
-        duration = app.get_video_duration(video_path)
+        duration = core_app.get_video_duration(video_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Duration calculation error: {str(e)}")
 
@@ -176,7 +185,7 @@ async def generate_video(payload: GenerateRequest):
     # 4. Create clip if duration >= clip_length
     if duration >= clip_length:
         try:
-            clip_path = app.create_random_clip(video_path, video_id, clip_length=clip_length)
+            clip_path = core_app.create_random_clip(video_path, video_id, clip_length=clip_length)
             is_clipped = True
         except Exception as e:
             clip_path = video_path
@@ -185,7 +194,7 @@ async def generate_video(payload: GenerateRequest):
     # 5. Optionally open in local Windows player
     if payload.open_local:
         try:
-            app.open_video(clip_path)
+            core_app.open_video(clip_path)
         except Exception:
             pass
 
@@ -207,7 +216,7 @@ async def generate_video(payload: GenerateRequest):
     }
 
 
-@server_app.get("/api/generate-stream")
+@router.get("/generate-stream")
 async def generate_video_sse(
     prompt: str,
     style_prefix: str = "cartoon video of",
@@ -230,7 +239,7 @@ async def generate_video_sse(
             await asyncio.sleep(0.1)
 
             loop = asyncio.get_event_loop()
-            url, video_id = await loop.run_in_executor(None, app.search_youtube, query)
+            url, video_id = await loop.run_in_executor(None, core_app.search_youtube, query)
 
             if not url or not video_id:
                 yield f"data: {json.dumps({'status': 'error', 'message': 'No video found for query'})}\n\n"
@@ -239,11 +248,11 @@ async def generate_video_sse(
             yield f"data: {json.dumps({'stage': 2, 'message': f'Found video ID: {video_id}. Downloading 360p stream...', 'video_id': video_id, 'url': url})}\n\n"
 
             # Step 2: Download
-            video_path = await loop.run_in_executor(None, app.download_360p, url, video_id)
+            video_path = await loop.run_in_executor(None, core_app.download_360p, url, video_id)
             yield f"data: {json.dumps({'stage': 3, 'message': 'Download complete. Analyzing video duration...'})}\n\n"
 
             # Step 3: Duration
-            duration = await loop.run_in_executor(None, app.get_video_duration, video_path)
+            duration = await loop.run_in_executor(None, core_app.get_video_duration, video_path)
             yield f"data: {json.dumps({'stage': 4, 'message': f'Duration is {duration:.2f}s. Generating clip...', 'duration': duration})}\n\n"
 
             # Step 4: Clip
@@ -251,13 +260,13 @@ async def generate_video_sse(
             clip_path = video_path
             if duration >= clip_length:
                 yield f"data: {json.dumps({'stage': 4, 'message': f'Creating {clip_length}s random clip with FFmpeg...'})}\n\n"
-                clip_path = await loop.run_in_executor(None, app.create_random_clip, video_path, video_id, clip_length)
+                clip_path = await loop.run_in_executor(None, core_app.create_random_clip, video_path, video_id, clip_length)
                 is_clipped = True
             else:
                 yield f"data: {json.dumps({'stage': 4, 'message': f'Video is under {clip_length}s. Using full video.'})}\n\n"
 
             if open_local:
-                await loop.run_in_executor(None, app.open_video, clip_path)
+                await loop.run_in_executor(None, core_app.open_video, clip_path)
 
             result = {
                 "stage": 5,
@@ -284,7 +293,7 @@ async def generate_video_sse(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@server_app.api_route("/api/stream/{filename}", methods=["GET", "HEAD"])
+@router.api_route("/stream/{filename}", methods=["GET", "HEAD"])
 async def stream_video(filename: str, request: Request, download: Optional[int] = 0):
     """Stream video with HTTP Range header support for seeking and playback."""
     file_path = (DOWNLOADS_DIR / filename).resolve()
@@ -340,7 +349,7 @@ async def stream_video(filename: str, request: Request, download: Optional[int] 
     return StreamingResponse(iter_range(), headers=headers, status_code=206)
 
 
-@server_app.post("/api/open-local")
+@router.post("/open-local")
 async def open_in_local_player(payload: OpenLocalRequest):
     """Open a video in the Windows media player."""
     file_path = (DOWNLOADS_DIR / payload.filename).resolve()
@@ -348,13 +357,13 @@ async def open_in_local_player(payload: OpenLocalRequest):
         raise HTTPException(status_code=404, detail="Video not found")
 
     try:
-        app.open_video(file_path)
+        core_app.open_video(file_path)
         return {"success": True, "message": f"Opened {payload.filename} in Windows player"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@server_app.delete("/api/video/{filename}")
+@router.delete("/video/{filename}")
 async def delete_video(filename: str):
     """Delete a video file from downloads folder."""
     file_path = (DOWNLOADS_DIR / filename).resolve()
@@ -368,10 +377,17 @@ async def delete_video(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Include router with both /api prefix and root prefix
+server_app.include_router(router, prefix="/api")
+server_app.include_router(router)
+
+# Export app alias for Vercel
+app = server_app
+
 if __name__ == "__main__":
     port = 8000
     print("\n" + "=" * 60)
-    print("🎬 TEXT-TO-VIDEO STUDIO SERVER")
+    print("🎬 GENVIDEO STUDIO SERVER")
     print(f"🚀 Studio UI: http://localhost:{port}")
     print(f"📁 Downloads: {DOWNLOADS_DIR}")
     print("=" * 60 + "\n")

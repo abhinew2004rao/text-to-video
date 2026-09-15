@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GenVideo — Text-to-Video Engine</title>
+  <meta name="description" content="Generate high-quality video clips from any text prompt using YouTube Data API, yt-dlp, and intelligent FFmpeg cutting.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Studio Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Ambient Glow Canvas -->
+  <div class="ambient-bg">
+    <div class="glow-orb-1"></div>
+    <div class="glow-orb-2"></div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- ============================================================
+         STUDIO HEADER
+         ============================================================ -->
+    <header class="studio-header">
+      <div class="brand-section">
+        <div class="brand-logo-badge">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </div>
+        <div>
+          <h1 class="brand-title">
+            <span class="gradient-text">GenVideo</span>
+            <span class="brand-badge">AI Pipeline</span>
+          </h1>
+          <p class="brand-tagline">Text-to-Video Generation & Intelligent Clip Studio</p>
+        </div>
+      </div>
+
+      <div class="header-status-group">
+        <div class="status-pill" id="systemStatusPill" title="System Diagnostic">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+
+        <div class="storage-pill" id="storagePill" title="Storage in downloads/">
+          <i class="fa-solid fa-hard-drive"></i> <span id="storageText">0 files</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============================================================
+         MAIN STUDIO WORKSPACE
+         ============================================================ -->
+    <main class="studio-grid">
+
+      <!-- LEFT COLUMN: CREATOR STUDIO -->
+      <section class="studio-panel creator-panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">
+              <i class="fa-solid fa-sliders"></i> Prompt Studio
+            </h2>
+            <p class="panel-subtitle">Describe the video scene you want to retrieve & clip</p>
+          </div>
+        </div>
+
+        <div class="input-section">
+          <!-- Prompt Textarea -->
+          <div class="form-group">
+            <div class="label-row">
+              <label class="form-label" for="promptInput">Prompt / Scene Description</label>
+              <span class="prompt-counter" id="promptCharCount">0 chars</span>
+            </div>
+            <div class="prompt-textarea-wrapper">
+              <textarea 
+                id="promptInput" 
+                class="prompt-textarea" 
+                rows="3" 
+                placeholder="e.g. childrens are playing in the park..."
+                spellcheck="false"
+              >childrens are playing in the park</textarea>
+            </div>
+          </div>
+
+          <!-- Style Preset Chips -->
+          <div class="form-group">
+            <label class="form-label">Search Style Modifier</label>
+            <div class="style-chips-grid" id="styleChips">
+              <button type="button" class="style-chip active" data-style="cartoon video of">
+                <i class="fa-solid fa-palette"></i> Cartoon Video
+              </button>
+              <button type="button" class="style-chip" data-style="cinematic 4k video of">
+                <i class="fa-solid fa-film"></i> Cinematic 4K
+              </button>
+              <button type="button" class="style-chip" data-style="anime style video of">
+                <i class="fa-solid fa-dragon"></i> Anime Aesthetic
+              </button>
+              <button type="button" class="style-chip" data-style="nature documentary of">
+                <i class="fa-solid fa-leaf"></i> Nature Doc
+              </button>
+              <button type="button" class="style-chip" data-style="drone footage of">
+                <i class="fa-solid fa-plane"></i> Drone Flyover
+              </button>
+              <button type="button" class="style-chip" data-style="">
+                <i class="fa-solid fa-bolt"></i> Raw (Direct)
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Inspiration Tags -->
+          <div class="inspiration-section">
+            <label class="form-label">Quick Ideas</label>
+            <div class="inspiration-pills">
+              <button type="button" class="insp-pill" data-prompt="childrens are playing in the park">Kids in park</button>
+              <button type="button" class="insp-pill" data-prompt="cute golden retriever puppy playing with ball">Puppy playing</button>
+              <button type="button" class="insp-pill" data-prompt="cyberpunk neon city flyover night">Cyberpunk city</button>
+              <button type="button" class="insp-pill" data-prompt="relaxing rain over tokyo alleyway">Tokyo rain</button>
+              <button type="button" class="insp-pill" data-prompt="supercar drifting on mountain pass track">Supercar drift</button>
+              <button type="button" class="insp-pill" data-prompt="relaxing ocean waves sunset tropical beach">Sunset waves</button>
+            </div>
+          </div>
+
+          <!-- Options Grid -->
+          <div class="options-grid">
+            <div class="slider-container">
+              <div class="slider-header">
+                <span class="form-label">Clip Duration</span>
+                <span class="slider-val" id="durationValue">15s</span>
+              </div>
+              <input 
+                type="range" 
+                id="clipDurationSlider" 
+                class="custom-slider" 
+                min="5" 
+                max="60" 
+                value="15" 
+                step="1"
+              >
+            </div>
+
+            <div class="toggle-container" style="display:flex; align-items:center;">
+              <label class="toggle-option" for="openLocalToggle">
+                <input type="checkbox" id="openLocalToggle">
+                <span>Auto-open in Windows Media Player</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Primary Generate CTA -->
+          <button type="button" class="btn-generate" id="btnGenerate">
+            <div class="btn-shimmer"></div>
+            <i class="fa-solid fa-sparkles"></i>
+            <span>Generate Video Clip</span>
+            <span style="opacity: 0.65; font-size: 0.75rem; font-family: var(--font-mono); margin-left: 6px;">[Ctrl+Enter]</span>
+          </button>
+
+          <!-- Live Pipeline Tracker Card (Hidden by default) -->
+          <div class="pipeline-tracker" id="pipelineTracker" style="display: none;">
+            <div class="pipeline-header">
+              <span class="form-label" style="font-size:0.78rem;">Live Pipeline Status</span>
+              <div class="pipeline-status-badge">
+                <i class="fa-solid fa-spinner fa-spin" id="pipelineSpinner"></i>
+                <span id="pipelineStatusText">Processing...</span>
+              </div>
+            </div>
+
+            <div class="pipeline-steps">
+              <div class="pipeline-step" id="step1">
+                <div class="step-circle"><i class="fa-solid fa-magnifying-glass"></i></div>
+                <span class="step-label">Search</span>
+              </div>
+              <div class="pipeline-step" id="step2">
+                <div class="step-circle"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+                <span class="step-label">Download</span>
+              </div>
+              <div class="pipeline-step" id="step3">
+                <div class="step-circle"><i class="fa-solid fa-stopwatch"></i></div>
+                <span class="step-label">Duration</span>
+              </div>
+              <div class="pipeline-step" id="step4">
+                <div class="step-circle"><i class="fa-solid fa-scissors"></i></div>
+                <span class="step-label">Clip Cut</span>
+              </div>
+              <div class="pipeline-step" id="step5">
+                <div class="step-circle"><i class="fa-solid fa-check"></i></div>
+                <span class="step-label">Ready</span>
+              </div>
+            </div>
+
+            <div class="pipeline-log" id="pipelineLog">
+              Initializing generation pipeline...
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN: VIDEO STAGE & PLAYER -->
+      <section class="studio-panel player-stage-panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">
+              <i class="fa-solid fa-play"></i> Studio Stage
+            </h2>
+            <p class="panel-subtitle">Instant browser preview & playback</p>
+          </div>
+
+          <!-- Clip vs Full Switcher -->
+          <div class="player-version-tabs" id="versionTabs" style="display: none;">
+            <div class="tabs-group">
+              <button type="button" class="tab-btn active" id="tabClip">
+                <i class="fa-solid fa-scissors"></i> Clip
+              </button>
+              <button type="button" class="tab-btn" id="tabFull">
+                <i class="fa-solid fa-film"></i> Full Video
+              </button>
+            </div>
+            <span class="version-badge" id="playerDurationBadge">15.0s</span>
+          </div>
+        </div>
+
+        <!-- Placeholder when no video loaded -->
+        <div class="player-placeholder" id="playerPlaceholder">
+          <div class="placeholder-icon-wrap">
+            <i class="fa-solid fa-film"></i>
+          </div>
+          <h3 class="placeholder-title">No Video Active</h3>
+          <p class="placeholder-desc">
+            Type your prompt on the left and hit Generate, or pick any existing clip from your library below.
+          </p>
+          <button type="button" class="action-btn" id="btnLoadLatest" style="max-width: 200px; display: none;">
+            <i class="fa-solid fa-clock-rotate-left"></i> Load Latest Video
+          </button>
+        </div>
+
+        <!-- Active Video Stage -->
+        <div class="video-stage-content" id="activeVideoStage" style="display: none;">
+          <div class="video-viewport">
+            <div class="video-backlight"></div>
+            <video 
+              id="mainVideoPlayer" 
+              class="video-element" 
+              controls 
+              autoplay 
+              playsinline
+              preload="metadata"
+            >
+              Your browser does not support HTML5 video playback.
+            </video>
+          </div>
+
+          <!-- Metadata card -->
+          <div class="video-meta-card">
+            <div class="video-title-row">
+              <h3 class="video-title" id="stageVideoTitle">Video Title</h3>
+              <a href="#" target="_blank" id="stageYouTubeLink" class="action-btn" style="flex:0 0 auto; min-width:auto; padding: 5px 12px; font-size:0.78rem;" title="Watch on YouTube">
+                <i class="fa-brands fa-youtube" style="color:#ff3333;"></i> YouTube
+              </a>
+            </div>
+
+            <div class="meta-tags-row">
+              <div class="meta-tag" id="tagVideoId"><i class="fa-solid fa-fingerprint"></i> ID: <span>-</span></div>
+              <div class="meta-tag" id="tagDuration"><i class="fa-solid fa-clock"></i> Duration: <span>-</span></div>
+              <div class="meta-tag" id="tagFileSize"><i class="fa-solid fa-file-video"></i> Size: <span>-</span></div>
+              <div class="meta-tag" id="tagResolution"><i class="fa-solid fa-display"></i> Quality: <span>360p MP4</span></div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="player-actions-row">
+              <a href="#" class="action-btn btn-primary-action" id="btnDownload" download>
+                <i class="fa-solid fa-download"></i> Download MP4
+              </a>
+              <button type="button" class="action-btn" id="btnOpenLocal">
+                <i class="fa-solid fa-desktop"></i> Open in Windows Player
+              </button>
+              <button type="button" class="action-btn" id="btnCopyLink">
+                <i class="fa-solid fa-copy"></i> Copy Link
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ============================================================
+         BOTTOM SECTION: SAVED CLIPS & MEDIA LIBRARY
+         ============================================================ -->
+    <section class="library-section">
+      <div class="library-header">
+        <div>
+          <h2 class="panel-title">
+            <i class="fa-solid fa-photo-film"></i> Media Library
+            <span class="brand-badge" id="libraryCountBadge">0</span>
+          </h2>
+          <p class="panel-subtitle">Previously generated clips and downloads in your local folder</p>
+        </div>
+
+        <div class="library-search-wrap">
+          <input 
+            type="text" 
+            id="librarySearchInput" 
+            class="library-search-input" 
+            placeholder="Filter library clips..."
+          >
+          <button type="button" class="btn-refresh" id="btnRefreshLibrary" title="Refresh Library">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="library-grid" id="libraryGrid">
+        <div class="library-empty">
+          <i class="fa-solid fa-spinner fa-spin"></i> Loading clips...
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Application Logic -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
