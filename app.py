@@ -1,7 +1,16 @@
 import os
+import sys
 import random
 import subprocess
 from pathlib import Path
+
+# Ensure UTF-8 console output on Windows to handle emojis in video titles
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
@@ -16,6 +25,12 @@ load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
+if not YOUTUBE_API_KEY:
+    raise ValueError(
+        "YOUTUBE_API_KEY is not set. Please add it to your .env file:\n"
+        "YOUTUBE_API_KEY=your_key_here"
+    )
+
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
@@ -24,8 +39,11 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 # SEARCH YOUTUBE
 # ============================================================
 
-def search_youtube(query):
-    """Search YouTube and return the top video URL and video ID."""
+def search_youtube(query, max_candidates=5):
+    """
+    Search YouTube and return the top available, downloadable video URL and video ID.
+    If the #1 video is private/deleted, automatically falls back to the next result.
+    """
 
     youtube = build(
         "youtube",
@@ -37,7 +55,7 @@ def search_youtube(query):
         part="id,snippet",
         q=query,
         type="video",
-        maxResults=1,
+        maxResults=max_candidates,
         order="relevance"
     ).execute()
 
@@ -47,19 +65,40 @@ def search_youtube(query):
         print("No video found.")
         return None, None
 
-    video_id = items[0]["id"]["videoId"]
-    title = items[0]["snippet"]["title"]
+    for item in items:
+        video_id = item["id"].get("videoId")
+        if not video_id:
+            continue
 
-    url = f"https://www.youtube.com/watch?v={video_id}"
+        title = item["snippet"]["title"]
+        url = f"https://www.youtube.com/watch?v={video_id}"
 
-    print("\n==============================")
-    print("YouTube Result")
-    print("==============================")
-    print(f"Title    : {title}")
-    print(f"Video ID : {video_id}")
-    print(f"URL      : {url}")
+        # Verify video availability with android player client fallback
+        try:
+            ydl_check_opts = {
+                "quiet": True,
+                "noplaylist": True,
+                "extractor_args": {"youtube": {"player_client": ["android", "web"]}}
+            }
+            with yt_dlp.YoutubeDL(ydl_check_opts) as ydl:
+                ydl.extract_info(url, download=False)
 
-    return url, video_id
+            print("\n==============================")
+            print("YouTube Result")
+            print("==============================")
+            print(f"Title    : {title}")
+            print(f"Video ID : {video_id}")
+            print(f"URL      : {url}")
+            return url, video_id
+
+        except Exception:
+            print(f"Video {video_id} is unavailable or restricted. Trying next candidate...")
+            continue
+
+    # Fallback to first video if check was inconclusive
+    first_item = items[0]
+    first_id = first_item["id"]["videoId"]
+    return f"https://www.youtube.com/watch?v={first_id}", first_id
 
 
 # ============================================================
@@ -82,7 +121,7 @@ def download_360p(url, video_id):
         # Otherwise best combined <= 360p
         "format": (
             "bestvideo[height<=360]+bestaudio/"
-            "best[height<=360]"
+            "best[height<=360]/best"
         ),
 
         "outtmpl": output_template,
@@ -94,6 +133,13 @@ def download_360p(url, video_id):
         "noplaylist": True,
 
         "quiet": False,
+
+        # Support Android client fallback to avoid 'This video is not available'
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"]
+            }
+        },
     }
 
     print("\n==============================")
