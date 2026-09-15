@@ -23,3 +23,5 @@ downloads/*
 Thumbs.db
 .DS_Store
 *.log
+
+.vercel
