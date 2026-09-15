@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Secrets & Environment variables
+.env
+.env.*
+!.env.example
+
+# Video media files (avoid committing large binary media)
+downloads/*
+!downloads/.gitkeep
+
+# IDE & OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+*.log
